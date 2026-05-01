@@ -1,0 +1,35 @@
+FROM ubuntu:22.04
+
+# 1. Install dependencies
+RUN apt-get update && apt-get install vim -y && apt-get install -y \
+    curl ca-certificates iptables socat conntrack \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Download K3s binary (v1.29.1) directly
+# We use -L to follow redirects and -o to specify the output path
+RUN curl -fL "https://github.com/k3s-io/k3s/releases/download/v1.29.1%2Bk3s1/k3s" -o /usr/local/bin/k3s \
+    && chmod +x /usr/local/bin/k3s
+
+# 3. Download Kubectl (v1.29.1) directly
+RUN curl -fL "https://dl.k8s.io/release/v1.29.1/bin/linux/amd64/kubectl" -o /usr/local/bin/kubectl \
+    && chmod +x /usr/local/bin/kubectl
+
+# 4. Download Kubeadm (v1.29.1) directly
+RUN curl -fL "https://dl.k8s.io/release/v1.29.1/bin/linux/amd64/kubeadm" -o /usr/local/bin/kubeadm \
+    && chmod +x /usr/local/bin/kubeadm
+
+# 5. Create the entrypoint script
+RUN echo '#!/bin/bash \n\
+# Set Kubeconfig path immediately \n\
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml \n\
+\n\
+# Start K3s server in background \n\
+k3s server --write-kubeconfig-mode 644 --snapshotter=native & \n\
+\n\
+echo "Waiting for K3s to generate config..." \n\
+until [ -f /etc/rancher/k3s/k3s.yaml ]; do sleep 2; done \n\
+\n\
+echo "K3s is starting. Tail-ing logs now..." \n\
+exec tail -f /var/log/lastlog' > /entrypoint.sh && chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
